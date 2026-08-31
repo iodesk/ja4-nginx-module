@@ -1,4 +1,4 @@
-# ngx_http_ja4
+# ja4-nginx-module
 
 JA4 TLS fingerprint as a standalone nginx module.
 
