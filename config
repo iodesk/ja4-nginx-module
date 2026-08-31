@@ -1,0 +1,19 @@
+ngx_addon_name=ngx_http_ja4_module
+
+HTTP_MODULES="$HTTP_MODULES ngx_http_ja4_module"
+
+# module local headers
+CORE_INCS="$CORE_INCS $ngx_addon_dir/include"
+
+# Debug variables ($ssl_ja4_r / $ssl_ja4_o) are enabled at runtime with
+# the "ja4_debug_enable on;" directive (default off).
+
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
+    $ngx_addon_dir/src/ngx_http_ja4_module.c \
+    $ngx_addon_dir/src/ngx_http_ja4_tls_parser.c \
+    $ngx_addon_dir/src/ngx_http_ja4_tls_builder.c \
+    $ngx_addon_dir/src/ngx_http_ja4_tls_server_parser.c \
+    $ngx_addon_dir/src/ngx_http_ja4_tls_server_builder.c \
+    $ngx_addon_dir/src/ngx_http_ja4_http_parser.c \
+    $ngx_addon_dir/src/ngx_http_ja4_http_builder.c \
+    $ngx_addon_dir/src/ngx_http_ja4_crypto.c"
