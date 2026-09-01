@@ -141,12 +141,7 @@ stream {
 | `ja4_stream_debug_enable` | stream | off | Expose `$ssl_ja4_r` / `$ssl_ja4_o` in stream |
 
 ## Build Variants
-
-Works in all three modes:
-
 * Static module (`--add-module`)
-* Dynamic module (`.so`)
-* OpenResty addon
 
 No additional external dependencies. No nginx core modifications. No OpenSSL patches.
 
