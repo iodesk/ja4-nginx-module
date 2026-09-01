@@ -134,7 +134,6 @@ rm -rf Makefile objs && \
     --with-http_slice_module \
     --with-http_sub_module \
     --add-module=./ja4 \
-    --add-module=./nginx-ssl-dynamic \
     --with-cc-opt="-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -flto=auto -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fPIC" \
     --with-ld-opt="-flto=auto -Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie" \
 && make -j"$(nproc)" \
