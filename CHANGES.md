@@ -1,5 +1,19 @@
 # CHANGES
 
+## v0.1.1
+
+Stream module build and linkage completion.
+
+### Stream Module
+
+* **`config` file migrated to new-style format** for nginx 1.30.4 build system. Old-style `HTTP_MODULES` / `STREAM_MODULES` / `NGX_ADDON_SRCS` variables are no longer supported. The `config` now uses `ngx_module_type` + `. auto/module` with separate registrations for HTTP and STREAM module types.
+
+* **Shared SSL ex-data index between HTTP and stream modules.** `ngx_http_ja4_ssl_index` is now declared `extern` in `ngx_http_ja4.h` so both HTTP and stream modules read/write the same per-connection TLS context. Stream variable handler (`$ssl_ja4`, `$ssl_ja4s`) now resolves correctly.
+
+* **`ngx_http_ja4_msg_callback` visible across modules.** Forward declaration changed from `static` to external linkage so the stream module can link against the shared callback function.
+
+---
+
 ## v0.1.0
 
 Build based on **nginx 1.30.4**. This document records every change introduced by the `ja4/` addon module.
@@ -22,7 +36,7 @@ The build only adds the `ja4/` addon directory (via `--add-module` / `--add-dyna
 
 ### New Features
 
-* **JA4 / JA4S / JA4H fingerprint module** (`ja4/`)
+* **Stream support** – JA4 fingerprints are now usable inside `stream {}` contexts. The module registers a Stream‑module that installs the same OpenSSL message callback via `ngx_stream_ssl_module` and exposes `$ssl_ja4`, `$ssl_ja4s`, `$ssl_ja4_r`, `$ssl_ja4_o` as stream variables. No core or OpenSSL patches are required.
 
   One standalone nginx module computing three fingerprints:
 
@@ -71,4 +85,4 @@ The build only adds the `ja4/` addon directory (via `--add-module` / `--add-dyna
 ### Base Version
 
 * nginx 1.30.4 (unmodified core).
-* openssl 4 (unmodified)
+* openssl 4 (unmodified).

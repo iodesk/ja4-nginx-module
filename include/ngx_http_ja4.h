@@ -27,12 +27,10 @@
 #define NGX_JA4_MAX_FIELDS   256
 #define NGX_JA4_RAW_LEN      1024
 
-
 typedef struct {
     ngx_flag_t  enable;
     ngx_flag_t  debug_enable;
 } ngx_http_ja4_srv_conf_t;
-
 
 /*
  * Per-connection result context.
@@ -55,5 +53,7 @@ typedef struct {
     unsigned   done:1;
 } ngx_http_ja4_ctx_t;
 
+/* Shared SSL ex-data index between HTTP and stream modules. */
+extern int ngx_http_ja4_ssl_index;
 
 #endif /* _NGX_HTTP_JA4_H_INCLUDED_ */

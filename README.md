@@ -1,35 +1,49 @@
-# ngx_http_ja4
+# ja4-nginx-module
 
-JA4 TLS fingerprint as a standalone nginx module.
+JA4+ TLS fingerprint as a standalone nginx module.
 
 Zero changes to nginx core. Zero changes to OpenSSL. Just drop it in and build.
 
-The module hooks into OpenSSL's message callback (`SSL_CTX_set_msg_callback`) on each server's existing `SSL_CTX`, parses the raw TLS ClientHello, and computes the JA4 fingerprint per the [FoxIO JA4 specification](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md).
+The module hooks into OpenSSL's message callback (`SSL_CTX_set_msg_callback`) on each server's existing `SSL_CTX`, parses the raw TLS ClientHello/ServerHello, and computes JA4/JA4S/JA4H fingerprints per the [FoxIO JA4+ specification](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md).
+
+## Fingerprints
+
+| Fingerprint | Variable | Scope | Source | Example |
+|---|---|---|---|---|
+| JA4 | `$ssl_ja4` | connection | TLS ClientHello | `t13d1516h2_8daaf6152771_e5627efa2ab1` |
+| JA4S | `$ssl_ja4s` | connection | TLS ServerHello | `t130200_1302_a56c5b993250` |
+| JA4H | `$http_ja4h` | request | HTTP headers | `ge11cr06enus_8c2f9ef95269_d23bf79698dc_69e42fa741fe` |
+| JA4_r | `$ssl_ja4_r` | connection | Raw JA4 (debug) | `t13d1516h2_002f,..._0403,...` |
+| JA4_o | `$ssl_ja4_o` | connection | Raw JA4 original order (debug) | `t13d1516h2_1301,..._0403,...` |
+
+Available in both `http {}` and `stream {}` contexts (JA4/JA4S only for stream).
+
+## Architecture
 
 ```text
-ngx_http_ja4
-   |          |          |
-   v          v          v
-tls_parser  tls_server_ http_parser
- (JA4)      parser      (JA4H)
-            (JA4S)
-   v          v          v
-   +----------+----------+
-              v
-           crypto
+                    ┌──────────────────────────────────────┐
+                    │           ngx_http_ja4_module        │
+                    │  (HTTP: JA4 + JA4S + JA4H)           │
+                    ├──────────────────────────────────────┤
+                    │  SSL_CTX_set_msg_callback            │
+                    │         │             │              │
+                    │    tls_parser    tls_server_parser   │
+                    │      (JA4)         (JA4S)            │
+                    │         │             │              │
+                    │    tls_builder   tls_server_builder  │
+                    │         │             │              │
+                    │    http_parser / http_builder        │
+                    │         (JA4H)                       │
+                    │              │                       │
+                    │           crypto                     │
+                    │       (SHA-256)                      │
+                    ├──────────────────────────────────────┤
+                    │         ngx_stream_ja4_module        │
+                    │  (Stream: JA4 + JA4S)                │
+                    │  Reuses shared SSL ex-data index     │
+                    │  and callback function from HTTP      │
+                    └──────────────────────────────────────┘
 ```
-
-## Why ngx_http_ja4
-
-**Zero core patch.** No fork. No OpenSSL patch. The module installs itself through public nginx and OpenSSL APIs only.
-
-**Three fingerprints, one module.** JA4 (TLS ClientHello), JA4S (ServerHello), and JA4H (HTTP) computed from a single module with three independent pipelines sharing one SHA-256 crypto layer.
-
-**Computed once, cached forever.** JA4 and JA4S are parsed at ClientHello time, once per connection, and cached in SSL ex-data. JA4H is computed once per HTTP request and cached in the request context. Variable reads return a pointer with zero parsing, zero hashing, zero copying.
-
-**QUIC ready.** Automatic HTTP/3 detection. First character becomes `q` when the connection is QUIC (requires nginx built with `--with-http_v3_module`).
-
-**Minimal surface.** Self-contained SHA-256, no extra link dependencies. Static build via `--add-module`.
 
 ## Benchmark
 
@@ -53,6 +67,8 @@ Build the module as a static nginx addon:
 ./configure \
     --add-module=/path/to/ja4 \
     --with-http_ssl_module \
+    --with-stream \
+    --with-stream_ssl_module \
     ... \
 && make -j$(nproc) \
 && make install
@@ -62,43 +78,67 @@ Full installation guide with all dependencies: [docs/INSTALL.md](docs/INSTALL.md
 
 ## Configuration
 
-Enable per server block:
+### HTTP
 
 ```nginx
-server {
-    listen 443 ssl;
-
-    ssl_certificate      server.crt;
-    ssl_certificate_key  server.key;
-
+http {
     ja4_enable on;
 
-    # expose fingerprints
-    location = /ja4 {
-        default_type text/plain;
-        return 200 "$ssl_ja4\n$ssl_ja4s\n$http_ja4h\n";
+    server {
+        listen 443 ssl;
+        server_name example.com;
+
+        ssl_certificate      server.crt;
+        ssl_certificate_key  server.key;
+
+        location = /ja4 {
+            default_type text/plain;
+            return 200 "$ssl_ja4\n$ssl_ja4s\n$http_ja4h\n";
+        }
+
+        location / {
+            proxy_set_header X-JA4 $ssl_ja4;
+            proxy_set_header X-JA4H "ja4h_$http_ja4h";
+            proxy_pass http://upstream;
+        }
     }
 }
 ```
 
-Available variables:
+### Stream
 
-| Variable | Scope | Description |
-|---|---|---|
-| `$ssl_ja4` | connection | JA4 fingerprint (e.g. `t13d1516h2_8daaf6152771_e5627efa2ab1`) |
-| `$ssl_ja4s` | connection | JA4S fingerprint (server hello) |
-| `$http_ja4h` | request | JA4H fingerprint (HTTP, format `A_B_C_D`) |
-| `$ssl_ja4_r` | connection | Raw JA4 (requires `ja4_debug_enable on`) |
-| `$ssl_ja4_o` | connection | Raw JA4 order (requires `ja4_debug_enable on`) |
+```nginx
+stream {
+    ja4_stream_enable on;
 
-Directives:
+    log_format stream_main
+        '$remote_addr [$time_local] '
+        '$protocol $status '
+        'bytes_sent=$bytes_sent bytes_received=$bytes_received '
+        'session_time=$session_time '
+        'ja4=$ssl_ja4 ja4s=$ssl_ja4s';
+
+    access_log /var/log/nginx/stream-access.log stream_main;
+
+    server {
+        listen 51821 ssl;
+        ssl_certificate     /path/to/cert.pem;
+        ssl_certificate_key /path/to/key.pem;
+        proxy_pass upstream:51821;
+    }
+}
+```
+
+> **Note:** `proxy_set_header` and `add_header` are **not available** in `stream {}` context. JA4 data can only be logged, not forwarded as headers to the upstream.
+
+## Directives
 
 | Directive | Context | Default | Description |
 |---|---|---|---|
-| `ja4_enable` | server | on | Enable/disable JA4 computation |
-| `ja4_debug_enable` | http | off | Expose debug variables `$ssl_ja4_r` / `$ssl_ja4_o` |
-
-Full sample config: [sample-nginx.conf](sample-nginx.conf)
+| `ja4_enable` | http, server | on | Enable JA4/JA4S/JA4H computation |
+| `ja4_debug_enable` | http | off | Expose `$ssl_ja4_r` / `$ssl_ja4_o` |
+| `ja4_stream_enable` | stream, server | on | Enable JA4/JA4S in stream context |
+| `ja4_stream_debug_enable` | stream | off | Expose `$ssl_ja4_r` / `$ssl_ja4_o` in stream |
 
 ## Build Variants
 
@@ -112,6 +152,6 @@ No additional external dependencies. No nginx core modifications. No OpenSSL pat
 
 ## Docs
 
-* [INSTALL.md](docs/INSTALL.md)  Full installation guide
-* [BENCHMARK.md](docs/BENCHMARK.md)  Benchmark methodology and raw output
-* [CHANGES.md](docs/CHANGES.md)  Changelog
+* [INSTALL.md](docs/INSTALL.md) — Full installation guide
+* [BENCHMARK.md](docs/BENCHMARK.md) — Benchmark methodology and raw output
+* [CHANGES.md](CHANGES.md) — Changelog
