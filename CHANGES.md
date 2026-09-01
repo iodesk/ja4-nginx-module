@@ -12,6 +12,20 @@ Stream module build and linkage completion.
 
 * **`ngx_http_ja4_msg_callback` visible across modules.** Forward declaration changed from `static` to external linkage so the stream module can link against the shared callback function.
 
+### Source Reorganization
+
+* Source files reorganized from flat `src/` into subdirectories by concern:
+
+  ```
+  src/
+  ├── http/    — ngx_http_ja4_module.c, http_parser.c, http_builder.c
+  ├── tls/     — tls_parser.c, tls_builder.c, tls_server_parser.c,
+  │             tls_server_builder.c, crypto.c
+  └── tcp/     — ngx_stream_ja4_module.c
+  ```
+
+  `include/` remains flat. All `#include` directives unchanged (resolved via `-I $ngx_addon_dir/include`). `config` file paths updated accordingly.
+
 ---
 
 ## v0.1.0
